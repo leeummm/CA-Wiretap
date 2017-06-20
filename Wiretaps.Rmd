@@ -1,0 +1,227 @@
+---
+title: "Wiretaps"
+author: "Liam Schilling"
+date: "6/17/2017"
+output: html_document
+toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Goal: Find how effective California's Wiretapping was
+```{r}
+# loading libraries
+library(tidyverse)
+library(RColorBrewer)
+library(reshape2)
+library(scales)
+library(gridExtra)
+# loading data
+df <- read.csv("data.csv")
+
+# creating theme for ggplot
+mytheme <- theme(
+  panel.background = element_rect(fill = "#FAFAFA"),
+  plot.background = element_rect(fill = "#F0F0F0"),
+  panel.border = element_rect(colour = "#f0f0f0", fill = NA),
+  panel.grid.major = element_line(colour = "#d0d0d0", size =
+  .25),
+  panel.grid.minor = element_blank(),
+  axis.text.y = element_text(
+  size = 11,
+  colour = "#535353",
+  face = "bold"
+  ),
+  legend.background = element_rect(fill = "#f0f0f0"),
+  legend.title = element_text(
+    face = "bold",
+    size = 11,
+    colour = "#535353"
+  ),
+  plot.title = element_text(
+  face = "bold",
+  hjust = 0,
+  vjust = 2,
+  size = 20,
+  colour = "#3c3c3c"
+  ),
+  plot.caption = element_text(size = 6),
+  axis.text.x = element_text(
+  size = 11,
+  colour = "#535353",
+  face = "bold"
+  ),
+  plot.subtitle = element_text(
+  size = 11,
+  colour = "#535353",
+  face = "bold",
+  hjust = 0,
+  vjust = 2
+  ),
+  axis.title.y = element_text(
+  size = 11,
+  colour = "#535353",
+  face = "bold",
+  lineheight = 1,
+  vjust = -2
+  ),
+  axis.title.x = element_text(
+  size = 11,
+  colour = "#535353",
+  face = "bold",
+  lineheight = 1,
+  vjust = 0
+  ),
+  plot.margin = unit(c(1, 1, .5, .7), "cm"),
+  panel.grid.major.y = element_blank()
+  )
+
+themeline <- geom_hline(yintercept=0,size=1.2,colour="#535353")
+
+purplepal <- brewer.pal("Purples", n = 5)
+
+```
+
+##Data Exploration
+```{r}
+# Look at data
+str(df)
+# How many years are in the dataset?
+summary(df$DocketYear)
+
+# How does the funnel look for wiretapping (i.e. how many people end up getting arrested / convicted)
+
+funnel <- df %>% summarise(
+Conversations = sum(Communications, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Incriminated = sum(Incriminating, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Arrests = sum(Arrested, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Convictions = sum(Convicted, na.rm = TRUE) / sum(Communications, na.rm = TRUE)
+) %>% melt()
+
+
+funnel$value <- round(funnel$value * 100, digits = 2)
+
+funnel$city <- "Average"
+
+cities <- df %>% group_by(Jurisdiction) %>% summarise(
+Conversations = sum(Communications, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Incriminated = sum(Incriminating, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Arrests = sum(Arrested, na.rm = TRUE) / sum(Communications, na.rm = TRUE),
+Convictions = sum(Convicted, na.rm = TRUE) / sum(Communications, na.rm = TRUE)
+) %>% melt()
+
+cities$value <- round(cities$value * 100, digits = 2)
+colnames(cities)[1] <- "city"
+cities <- cities[,c(2,3,1)]
+
+funnel <- rbind(funnel, cities)
+funnel$avg <- 0
+funnel$avg[funnel$city == "Average"] <- 1
+funnel$avg <- as.factor(funnel$avg)
+ggplot(data = funnel, aes(x = variable, y = value, fill = city)) + geom_bar(stat = "summary", position = "dodge", fun.y="mean")
+```
+
+```{r}
+judge <-
+  df %>% group_by(Judge) %>% summarise(
+  totalcases = n(),
+  totalarrests = sum(Arrested, na.rm = TRUE),
+  cost = sum(PersonnelCost) + sum(ResourceCost)
+  ) %>% group_by(Judge) %>% summarise(
+  "Arrests/case" = sum(totalarrests) / sum(totalcases),
+  "Arrests/$" = sum(totalarrests) / sum(cost),
+  totalcase = sum(totalcases),
+  totalarrest = sum(totalarrests)
+  ) %>% filter(`Arrests/case` > 0)
+  
+  bluepal <- brewer.pal("Blues", n = 5)
+  
+  ggplot(data = judge,
+  aes(
+  x = reorder(Judge, judge$`Arrests/case`),
+  y = judge$`Arrests/case`
+  ),
+  fill = totalcase) + geom_bar(
+  data = judge,
+  stat = "identity",
+  aes(fill = totalcase),
+  alpha = .92,
+  colour = "#535353"
+  ) + coord_flip() + themeline + labs(x = "Judge\n",
+  y = "Arrests / Case",
+  title = "Judges With Most Effective Wiretaps",
+  fill = "Total Cases") + scale_fill_gradientn(colours = bluepal[2:5], breaks = seq(0, 200, 25)) + mytheme
+```
+
+
+# Who was the most effective judge? (Define as the most arrests / case)
+
+
+
+```{r}
+
+arrperdollar <-
+  df %>% group_by(Jurisdiction) %>% summarise(
+    totalcases = n(),
+    totalarrests = sum(Arrested, na.rm = TRUE),
+    cost = sum(PersonnelCost) + sum(ResourceCost)
+    ) %>% group_by(Jurisdiction) %>% summarise(
+    "Arrests/case" = sum(totalarrests) / sum(totalcases),
+    "Arrests/$" = (sum(totalarrests) / sum(cost))*100000 ,
+    totalcase = sum(totalcases),
+    totalarrest = sum(totalarrests)
+    ) %>% filter(`Arrests/case` > 0, totalcase > 4) %>% ggplot() + 
+    geom_bar(
+      aes(x = reorder(Jurisdiction, `Arrests/$`), y = `Arrests/$`),
+      stat = "identity",
+      fill = bluepal[3],
+      colour = "#535353",
+      size = .4,
+      alpha = .85
+    ) + mytheme + coord_flip() + labs(
+      x = "City\n",
+      y = "Arrests per $100,000 Spent",
+      subtitle = "Effectiveness per dollar spent",
+      caption = "Source: Kaggle.com"
+    )
+
+arrperdollar
+
+# ----
+arrpercase <-
+  df %>% group_by(Jurisdiction) %>% summarise(
+    totalcases = n(),
+    totalarrests = sum(Arrested, na.rm = TRUE),
+    cost = sum(PersonnelCost) + sum(ResourceCost)
+    ) %>% group_by(Jurisdiction) %>% summarise(
+    "Arrests/case" = sum(totalarrests) / sum(totalcases),
+    "$/Arrest" = sum(cost) / sum(totalarrests) ,
+    totalcase = sum(totalcases),
+    totalarrest = sum(totalarrests)
+    ) %>% filter(`Arrests/case` > 0, totalcase > 4) %>% ggplot() + 
+    geom_bar(
+      aes(x = reorder(Jurisdiction, `Arrests/case`), y = `Arrests/case`),
+      stat = "identity",
+      fill = purplepal[3],
+      alpha = .85,
+      colour = "#535353",
+      size = .4
+    ) + mytheme + coord_flip() + labs(
+      x = "",
+      y = "Arrests Per Case",
+      subtitle = "Effectiveness per case",
+      caption = "Source: Kaggle.com"
+    ) + scale_y_continuous(breaks = seq(0,9,3))
+
+arrpercase
+
+# Arranging graphs side by side
+grid.arrange(arrperdollar, arrpercase, ncol=2, nrow=1)
+
+# Saving file
+png(filename="counties.png", width = 3000, height = 1000, res = 200)
+grid.arrange(arrperdollar, arrpercase, ncol=2, nrow=1)
+dev.off()
+```
+
