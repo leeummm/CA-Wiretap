@@ -20,6 +20,8 @@ library(gridExtra)
 # loading data
 df <- read.csv("data.csv")
 
+# data source: https://www.kaggle.com/eff/california-wire-tapping
+
 # creating theme for ggplot
 mytheme <- theme(
   panel.background = element_rect(fill = "#FAFAFA"),
@@ -90,6 +92,9 @@ str(df)
 # How many years are in the dataset?
 summary(df$DocketYear)
 
+```
+
+```{r}
 # How does the funnel look for wiretapping (i.e. how many people end up getting arrested / convicted)
 
 funnel <- df %>% summarise(
@@ -122,6 +127,7 @@ funnel$avg <- as.factor(funnel$avg)
 ggplot(data = funnel, aes(x = variable, y = value, fill = city)) + geom_bar(stat = "summary", position = "dodge", fun.y="mean")
 ```
 
+## Who was the most effective judge? (Define as the most arrests / case)
 ```{r}
 judge <-
   df %>% group_by(Judge) %>% summarise(
@@ -155,10 +161,7 @@ judge <-
 ```
 
 
-# Who was the most effective judge? (Define as the most arrests / case)
-
-
-
+## Which city was the most effective?
 ```{r}
 
 arrperdollar <-
